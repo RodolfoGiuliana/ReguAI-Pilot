@@ -73,3 +73,16 @@ ReguAI-Pilot sfrutta un'architettura a **agenti LLM** dove un modello linguistic
 Per avviare l'applicazione Streamlit in locale:
 ```bash
 streamlit run app.py
+
+
+⚠️ Disclaimer Importante
+ReguAI-Pilot è un prototipo. NON è uno strumento di compliance legale o professionale. Le analisi generate sono indicative e basate sull'interpretazione del testo da parte di un modello AI, che può "allucinare", commettere errori o non comprendere le sfumature legali. È indispensabile che ogni risultato sia verificato da un consulente legale o un esperto di compliance qualificato. Cerberus R&D LTD non si assume alcuna responsabilità per decisioni prese basandosi sui risultati di questo prototipo.
+
+🤝 Contribuzioni
+Siamo aperti a suggerimenti e collaborazioni per migliorare questo prototipo. Se hai idee, fork the repository, crea la tua branch e invia una Pull Request!
+
+📜 Licenza
+Questo progetto è rilasciato sotto licenza MIT.
+
+Contatti
+Per maggiori informazioni o per esplorare soluzioni AI personalizzate per il tuo business, visita il sito di Cerberus R&D LTD o contatta www.cerberusrd.com
