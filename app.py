@@ -1,96 +1,89 @@
 import streamlit as st
 import os
-from openai import OpenAI
-import tiktoken
-from dotenv import load_dotenv
 
-# Caricamento variabili d'ambiente
-load_dotenv()
-
-# --- CONFIGURAZIONE PAGINA (Deve essere la prima istruzione Streamlit) ---
+# --- CONFIGURAZIONE PAGINA ---
 st.set_page_config(
     page_title="ReguAI-Pilot | Cerberus R&D",
     page_icon="🛡️",
     layout="wide"
 )
 
-# --- INIZIALIZZAZIONE CLIENT OPENAI ---
-api_key = os.environ.get("OPENAI_API_KEY")
-
-if not api_key:
-    st.error("⚠️ Chiave API OpenAI non trovata. Configura la variabile 'OPENAI_API_KEY' su Railway.")
-    client = None
-else:
-    client = OpenAI(api_key=api_key)
-
-# --- CONFIGURAZIONE MODELLO ---
-MODEL_NAME = "gpt-4" 
-MAX_TOKENS = 7000 
-
-# --- GESTIONE PROMPT (Con Fallback anti-crash) ---
-def load_prompt(analysis_type):
-    # Prompt di emergenza se i file non vengono trovati
-    fallbacks = {
-        "MiFID II": "Agisci come esperto di compliance MiFID II. Analizza questo testo e trova criticità: {document_text}",
-        "AI Act": "Agisci come consulente legale AI Act. Valuta i rischi di questo sistema AI: {document_text}"
+# --- LOGICA DI ANALISI DETERMINISTICA (Simulazione AI) ---
+def analyze_document_local(text, focus):
+    text = text.lower()
+    report = []
+    risk_score = 1
+    
+    # 1. Dizionario di criticità per MiFID II
+    mifid_keywords = {
+        "costi": "⚠️ Sezione Costi: Verificare la trasparenza ex-ante secondo MiFID II.",
+        "incentivi": "⚠️ Incentivi: Possibile conflitto di interesse rilevato (Inducements).",
+        "adeguatezza": "✅ Adeguatezza: Menzionata la valutazione del profilo di rischio cliente.",
+        "target market": "ℹ️ Target Market: Definizione del mercato di riferimento individuata."
     }
     
-    filename = "mifid_ii_compliance_prompt.txt" if "MiFID" in analysis_type else "ai_act_implications_prompt.txt"
-    path = os.path.join("prompt_templates", filename)
-    
-    if os.path.exists(path):
-        with open(path, "r", encoding="utf-8") as f:
-            return f.read()
-    return fallbacks.get("MiFID II" if "MiFID" in analysis_type else "AI Act")
+    # 2. Dizionario di criticità per AI Act
+    ai_act_keywords = {
+        "profilazione": "🔴 Rischio Alto: Rilevata attività di profilazione finanziaria automatizzata.",
+        "biometrico": "🚫 Divieto: Riferimento a dati biometrici (Verificare conformità AI Act).",
+        "trasparenza": "✅ Trasparenza: Il documento cita la spiegabilità dell'algoritmo.",
+        "black box": "⚠️ Criticità: Possibile mancanza di sorveglianza umana rilevata."
+    }
 
-# --- LOGICA DI ANALISI ---
-def run_analysis(user_input, p_template):
-    if not client:
-        return "Errore: Client OpenAI non configurato."
+    selected_keywords = mifid_keywords if "MiFID" in focus else ai_act_keywords
     
-    try:
-        # Semplice troncamento per evitare errori di context window su Railway
-        truncated_text = user_input[:12000] 
-        full_prompt = p_template.replace("{document_text}", truncated_text)
-        
-        response = client.chat.completions.create(
-            model=MODEL_NAME,
-            messages=[{"role": "system", "content": "Sei un analista di compliance d'élite."},
-                      {"role": "user", "content": full_prompt}],
-            temperature=0.3
-        )
-        return response.choices[0].message.content
-    except Exception as e:
-        return f"Errore durante l'analisi: {str(e)}"
+    # Esecuzione analisi
+    for key, val in selected_keywords.items():
+        if key in text:
+            report.append(val)
+            risk_score += 1
+
+    if not report:
+        return "Nessuna criticità immediata rilevata nei pattern standard.", 1
+    
+    return "\n\n".join(report), min(risk_score, 5)
 
 # --- INTERFACCIA UTENTE ---
-st.title("🛡️ ReguAI-Pilot")
-st.caption("Boutique Compliance Engine by Cerberus R&D")
+st.title("🛡️ ReguAI-Pilot (Offline Version)")
+st.caption("Boutique Compliance Engine by Cerberus R&D - Analisi Locale Strategica")
+
+st.markdown("""
+Questa versione di **ReguAI-Pilot** utilizza un motore di analisi euristico per identificare 
+clausole critiche senza inviare dati all'esterno.
+""")
 
 col1, col2 = st.columns([2, 1])
 
 with col1:
-    document_input = st.text_area("Incolla il documento finanziario qui:", height=450)
+    document_input = st.text_area("Incolla il documento finanziario qui:", 
+                                  height=400, 
+                                  placeholder="Esempio: 'Il prodotto prevede costi di gestione e incentivi per la rete...'")
 
 with col2:
-    st.info("Configurazione Analisi")
-    analysis_type = st.selectbox("Focus Normativo", ["MiFID II Compliance", "AI Act Implications"])
+    st.info("Parametri di Screening")
+    analysis_type = st.selectbox("Normativa di riferimento", 
+                                 ["MiFID II (Mercati Finanziari)", "EU AI Act (Intelligenza Artificiale)"])
     
-    analyze_btn = st.button("AVVIA SCREENING", use_container_width=True)
+    analyze_btn = st.button("AVVIA ANALISI LOCALE", use_container_width=True)
     
     st.divider()
-    st.markdown("### Compliance Score")
-    st.warning("Analisi preliminare automatizzata")
+    if analyze_btn and document_input:
+        findings, score = analyze_document_local(document_input, analysis_type)
+        st.metric("Risk Score", f"{score}/5")
+        if score > 3:
+            st.error("Rischio Elevato")
+        elif score > 1:
+            st.warning("Attenzione Richiesta")
+        else:
+            st.success("Profilo di Rischio Basso")
 
 if analyze_btn:
     if not document_input:
         st.warning("Inserisci un testo per procedere.")
     else:
-        prompt = load_prompt(analysis_type)
-        with st.spinner("L'intelligenza artificiale sta analizzando i rischi..."):
-            report = run_analysis(document_input, prompt)
-            st.subheader("Report Risultati")
-            st.markdown(report)
+        findings, score = analyze_document_local(document_input, analysis_type)
+        st.subheader("Risultati dello Screening")
+        st.markdown(findings)
 
 st.markdown("---")
-st.markdown("© 2026 Cerberus R&D LTD | Rodolfo Giuliana - CEO & Executive Director")
+st.markdown("© 2026 **Cerberus R&D LTD** | Rodolfo Giuliana - CEO & Executive Director")
