@@ -1,128 +1,96 @@
 import streamlit as st
 import os
-from openai import OpenAI # Utilizzo di OpenAI per semplicità (spazio per altri LLM)
-import tiktoken # Per il calcolo dei token
+from openai import OpenAI
+import tiktoken
 from dotenv import load_dotenv
 
-load_dotenv() # Caricare le variabili d'ambiente dal file .env
+# Caricamento variabili d'ambiente
+load_dotenv()
 
-# --- Configurazione OpenAI ---
-try:
-    client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
-except Exception as e:
-    st.error(f"Errore di configurazione OpenAI: {e}. Assicurati di avere OPENAI_API_KEY nel tuo file .env")
-    st.stop()
+# --- CONFIGURAZIONE PAGINA (Deve essere la prima istruzione Streamlit) ---
+st.set_page_config(
+    page_title="ReguAI-Pilot | Cerberus R&D",
+    page_icon="🛡️",
+    layout="wide"
+)
 
-# --- Parametri del Modello ---
-MODEL_NAME = "gpt-4" # O "gpt-3.5-turbo" per costi inferiori
-MAX_TOKENS = 8000 # Max tokens per GPT-4, adattare se si usa gpt-3.5-turbo
-OUTPUT_TOKENS = 1500 # Token massimi per risposta AI
+# --- INIZIALIZZAZIONE CLIENT OPENAI ---
+api_key = os.environ.get("OPENAI_API_KEY")
 
-# --- Prompt Templates (da file esterni per pulizia) ---
-def load_prompt(filename):
-    with open(os.path.join("prompt_templates", filename), "r", encoding="utf-8") as f:
-        return f.read()
+if not api_key:
+    st.error("⚠️ Chiave API OpenAI non trovata. Configura la variabile 'OPENAI_API_KEY' su Railway.")
+    client = None
+else:
+    client = OpenAI(api_key=api_key)
 
-# --- Funzioni di Utility ---
-def count_tokens(text):
-    """Conta i token di un testo usando il codificatore di OpenAI."""
+# --- CONFIGURAZIONE MODELLO ---
+MODEL_NAME = "gpt-4" 
+MAX_TOKENS = 7000 
+
+# --- GESTIONE PROMPT (Con Fallback anti-crash) ---
+def load_prompt(analysis_type):
+    # Prompt di emergenza se i file non vengono trovati
+    fallbacks = {
+        "MiFID II": "Agisci come esperto di compliance MiFID II. Analizza questo testo e trova criticità: {document_text}",
+        "AI Act": "Agisci come consulente legale AI Act. Valuta i rischi di questo sistema AI: {document_text}"
+    }
+    
+    filename = "mifid_ii_compliance_prompt.txt" if "MiFID" in analysis_type else "ai_act_implications_prompt.txt"
+    path = os.path.join("prompt_templates", filename)
+    
+    if os.path.exists(path):
+        with open(path, "r", encoding="utf-8") as f:
+            return f.read()
+    return fallbacks.get("MiFID II" if "MiFID" in analysis_type else "AI Act")
+
+# --- LOGICA DI ANALISI ---
+def run_analysis(user_input, p_template):
+    if not client:
+        return "Errore: Client OpenAI non configurato."
+    
     try:
-        encoding = tiktoken.encoding_for_model(MODEL_NAME)
-        return len(encoding.encode(text))
-    except Exception as e:
-        st.warning(f"Errore nel calcolo dei token: {e}. Il conteggio potrebbe essere impreciso.")
-        return len(text.split()) / 4 # Stima approssimativa
-
-def get_llm_response(prompt_template, user_input, max_output_tokens=OUTPUT_TOKENS):
-    """Invia il prompt all'LLM e restituisce la risposta."""
-    try:
-        full_prompt = prompt_template.format(document_text=user_input)
+        # Semplice troncamento per evitare errori di context window su Railway
+        truncated_text = user_input[:12000] 
+        full_prompt = p_template.replace("{document_text}", truncated_text)
         
-        
-        prompt_tokens = count_tokens(full_prompt)
-        if prompt_tokens + max_output_tokens > MAX_TOKENS:
-            st.warning(f"Il prompt generato è troppo lungo ({prompt_tokens} token). Verrà troncato per rientrare nel limite del modello ({MAX_TOKENS - max_output_tokens} token).")
-            # Trovare un modo più intelligente per troncare
-            max_input_tokens = MAX_TOKENS - max_output_tokens - 100 # Lasciare un buffer
-            user_input_tokens = count_tokens(user_input)
-            
-            if user_input_tokens > max_input_tokens:
-                # Esempio di troncamento semplice: prendere l'inizio e la fine
-                # In un caso reale, si usa un sommario intelligente o si dividerebbe il documento
-                st.info("Tentativo di troncamento: mantenendo inizio e fine del documento.")
-                user_input_parts = user_input.split()
-                # Considerare solo la prima parte e l'ultima parte
-                # Questo è un placeholder, un vero sistema userebbe text-splitting intelligente
-                truncated_user_input = " ".join(user_input_parts[:int(len(user_input_parts)*0.4)]) + \
-                                      "\n\n[... Documento troncato per limite di token ...]\n\n" + \
-                                      " ".join(user_input_parts[int(len(user_input_parts)*0.6):])
-                
-                full_prompt = prompt_template.format(document_text=truncated_user_input)
-                prompt_tokens = count_tokens(full_prompt)
-                if prompt_tokens > MAX_TOKENS - max_output_tokens:
-                    st.error("Anche dopo il troncamento, il prompt è troppo lungo. Prova con un documento più corto.")
-                    return "Errore: Documento troppo grande per l'analisi."
-            
-        messages = [{"role": "user", "content": full_prompt}]
-        
-        with st.spinner("Analisi in corso... Questo potrebbe richiedere alcuni secondi."):
-            response = client.chat.completions.create(
-                model=MODEL_NAME,
-                messages=messages,
-                max_tokens=max_output_tokens,
-                temperature=0.4 # Temperatura più bassa per risposte più conservative
-            )
+        response = client.chat.completions.create(
+            model=MODEL_NAME,
+            messages=[{"role": "system", "content": "Sei un analista di compliance d'élite."},
+                      {"role": "user", "content": full_prompt}],
+            temperature=0.3
+        )
         return response.choices[0].message.content
     except Exception as e:
-        st.error(f"Si è verificato un errore durante la comunicazione con l'LLM: {e}")
-        return "Impossibile completare l'analisi."
+        return f"Errore durante l'analisi: {str(e)}"
 
-# --- Interfaccia Utente Streamlit ---
-st.set_page_config(page_title="ReguAI-Pilot", layout="wide")
+# --- INTERFACCIA UTENTE ---
+st.title("🛡️ ReguAI-Pilot")
+st.caption("Boutique Compliance Engine by Cerberus R&D")
 
-st.title("🛡️ ReguAI-Pilot: Compliance Assistant (MiFID II / AI Act)")
-st.subheader("Un prototipo per l'analisi preliminare di documenti finanziari con LLM.")
+col1, col2 = st.columns([2, 1])
 
-st.markdown("""
-Questo strumento dimostra come un **agente LLM** possa supportare l'analisi di conformità per prodotti e servizi finanziari, focalizzandosi su MiFID II e i principi emergenti dell'AI Act. 
-Carica un documento (es. KIID, Termini e Condizioni di un prodotto finanziario) e ReguAI-Pilot evidenzierà potenziali rischi o aree di attenzione.
-""")
+with col1:
+    document_input = st.text_area("Incolla il documento finanziario qui:", height=450)
 
-st.warning("⚠️ **Disclaimer:** Questo è un prototipo dimostrativo e non sostituisce in alcun modo la consulenza legale, la due diligence professionale o l'analisi di compliance qualificata. Le informazioni fornite dall'AI sono indicative e potrebbero contenere imprecisioni o allucinazioni. Usalo con cautela e a proprio rischio.")
+with col2:
+    st.info("Configurazione Analisi")
+    analysis_type = st.selectbox("Focus Normativo", ["MiFID II Compliance", "AI Act Implications"])
+    
+    analyze_btn = st.button("AVVIA SCREENING", use_container_width=True)
+    
+    st.divider()
+    st.markdown("### Compliance Score")
+    st.warning("Analisi preliminare automatizzata")
 
-document_input = st.text_area(
-    "Incolla qui il testo del tuo documento finanziario (es. KIID, Prospetto Informativo, T&C):",
-    height=400,
-    placeholder="Incolla il testo del documento qui..."
-)
-
-analysis_type = st.radio(
-    "Seleziona il focus dell'analisi:",
-    ("MiFID II Compliance", "AI Act Implications (per prodotti AI-driven)"),
-    index=0 # Default to MiFID II
-)
-
-if st.button("Avvia Analisi di Conformità"):
+if analyze_btn:
     if not document_input:
-        st.error("Per favore, incolla il testo del documento per avviare l'analisi.")
+        st.warning("Inserisci un testo per procedere.")
     else:
-        # Carica il prompt template specifico
-        if analysis_type == "MiFID II Compliance":
-            prompt_file = "mifid_ii_compliance_prompt.txt"
-        else: # AI Act Implications
-            prompt_file = "ai_act_implications_prompt.txt"
-            
-        compliance_prompt = load_prompt(prompt_file)
-        
-        st.info(f"Avviando l'analisi per '{analysis_type}'...")
-        
-        # Esegui l'analisi
-        compliance_report = get_llm_response(compliance_prompt, document_input)
-        
-        st.subheader(f"Report di Conformità Preliminare: {analysis_type}")
-        st.markdown(compliance_report)
-
-        st.success("Analisi completata!")
+        prompt = load_prompt(analysis_type)
+        with st.spinner("L'intelligenza artificiale sta analizzando i rischi..."):
+            report = run_analysis(document_input, prompt)
+            st.subheader("Report Risultati")
+            st.markdown(report)
 
 st.markdown("---")
-st.markdown("Sviluppato da [Cerberus R&D LTD](https://www.cerberusrd.com) | [GitHub Repository](https://github.com/your-github-username/ReguAI-Pilot)")
+st.markdown("© 2026 Cerberus R&D LTD | Rodolfo Giuliana - CEO & Executive Director")
