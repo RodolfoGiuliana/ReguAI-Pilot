@@ -3,7 +3,7 @@ Un prototipo di assistente basato su LLM per la pre-analisi di conformità (MiFI
 
 # ReguAI-Pilot 🛡️: Il tuo assistente AI per la Compliance Finanziaria
 
-![ReguAI-Pilot Logo](https://www.cerberusrd.com/favicon.ico) **ReguAI-Pilot** è un prototipo dimostrativo che esplora il potenziale dei Large Language Models (LLM) nell'assistere le istituzioni finanziarie nella pre-analisi di conformità di documenti complessi. Sviluppato da [Cerberus R&D LTD](https://www.cerberusrd.com), questa applicazione web (Streamlit) offre una prima valutazione di testi relativi a prodotti o servizi finanziari, con un focus sui requisiti **MiFID II** e sulle implicazioni emergenti dell'**AI Act** europeo per i sistemi basati su Intelligenza Artificiale.
+**ReguAI-Pilot** è un prototipo dimostrativo che esplora il potenziale dei Large Language Models (LLM) nell'assistere le istituzioni finanziarie nella pre-analisi di conformità di documenti complessi. Sviluppato da [Cerberus R&D LTD](https://www.cerberusrd.com), questa applicazione web (Streamlit) offre una prima valutazione di testi relativi a prodotti o servizi finanziari, con un focus sui requisiti **MiFID II** e sulle implicazioni emergenti dell'**AI Act** europeo per i sistemi basati su Intelligenza Artificiale.
 
 ---
 
